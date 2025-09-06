@@ -5,22 +5,27 @@ import scraper  # make sure scraper.py is in the same folder
 
 st.set_page_config(page_title="JobLens AI", layout="wide")
 
-def load_data():
-    # If jobs.csv doesn't exist or is empty, trigger scraper
-    if not os.path.exists("jobs.csv") or os.path.getsize("jobs.csv") == 0:
+def load_data(force_refresh=False):
+    # If refresh button clicked or jobs.csv missing/empty → run scraper
+    if force_refresh or not os.path.exists("jobs.csv") or os.path.getsize("jobs.csv") == 0:
         st.info("📡 Fetching latest job postings...")
         scraper.scrape_jobs()
 
-    # Try loading again
+    # Try loading data safely
     if os.path.exists("jobs.csv") and os.path.getsize("jobs.csv") > 0:
         return pd.read_csv("jobs.csv")
     else:
         st.warning("⚠️ No job data available. Please try again later.")
         return pd.DataFrame(columns=["title", "company", "location", "stack"])
 
-# Load data
-df = load_data()
+# Sidebar
+st.sidebar.header("⚙️ Controls")
+refresh = st.sidebar.button("🔄 Refresh Jobs")
 
+# Load data (force refresh if button clicked)
+df = load_data(force_refresh=refresh)
+
+# Title
 st.title("💼 JobLens AI - Job Trends Dashboard")
 
 if not df.empty:
