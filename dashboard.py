@@ -1,77 +1,49 @@
+import os
 import pandas as pd
 import streamlit as st
-import altair as alt
-import matplotlib.pyplot as plt
+import scraper  # make sure scraper.py is in the same folder
 
-# ---------------------------
-# Load CSV robustly
-# ---------------------------
-try:
-    df = pd.read_csv("jobs.csv")
-except FileNotFoundError:
-    st.error("Error: jobs.csv not found.")
-    df = pd.DataFrame()
+st.set_page_config(page_title="JobLens AI", layout="wide")
 
-df.columns = df.columns.str.strip()
+def load_data():
+    # If jobs.csv doesn't exist or is empty, trigger scraper
+    if not os.path.exists("jobs.csv") or os.path.getsize("jobs.csv") == 0:
+        st.info("📡 Fetching latest job postings...")
+        scraper.scrape_jobs()
 
-# ---------------------------
-# Streamlit App UI
-# ---------------------------
-st.title("JobLensAI Dashboard")
+    # Try loading again
+    if os.path.exists("jobs.csv") and os.path.getsize("jobs.csv") > 0:
+        return pd.read_csv("jobs.csv")
+    else:
+        st.warning("⚠️ No job data available. Please try again later.")
+        return pd.DataFrame(columns=["title", "company", "location", "stack"])
 
-job_filter = st.text_input("Filter jobs (leave empty for all):")
+# Load data
+df = load_data()
 
-if job_filter:
-    filtered_df = df[df.apply(lambda row: row.astype(str).str.contains(job_filter, case=False).any(), axis=1)]
-else:
+st.title("💼 JobLens AI - Job Trends Dashboard")
+
+if not df.empty:
+    # Sidebar filters
+    st.sidebar.header("🔎 Filters")
+    locations = st.sidebar.multiselect("Filter by Location", options=df["location"].unique())
+    stacks = st.sidebar.multiselect("Filter by Stack", options=df["stack"].unique())
+
     filtered_df = df.copy()
+    if locations:
+        filtered_df = filtered_df[filtered_df["location"].isin(locations)]
+    if stacks:
+        filtered_df = filtered_df[filtered_df["stack"].isin(stacks)]
 
-st.write(f"Total jobs found: {len(filtered_df)}")
+    st.write(f"### Showing {len(filtered_df)} job postings")
+    st.dataframe(filtered_df)
 
-# ---------------------------
-# Count skills in job titles
-# ---------------------------
-skills = ["python", "java", "sql", "react", "django", "c#", "ai", "data"]
+    # Job counts by location
+    st.subheader("📍 Job Distribution by Location")
+    st.bar_chart(filtered_df["location"].value_counts())
 
-skill_counts = {
-    skill: int(filtered_df["title"].str.lower().str.contains(skill).sum())
-    for skill in skills
-}
-
-# Convert to DataFrame for plotting
-skill_df = pd.DataFrame(list(skill_counts.items()), columns=["Skill", "Count"])
-skill_df = skill_df[skill_df["Count"] > 0]  # show only non-zero
-
-if not skill_df.empty:
-    # ---------------------------
-    # Bar chart of skill counts
-    # ---------------------------
-    st.subheader("Skill Occurrences (Bar Chart)")
-    chart = alt.Chart(skill_df).mark_bar().encode(
-        x=alt.X("Skill", sort='-y'),
-        y="Count",
-        tooltip=["Skill", "Count"]
-    )
-    st.altair_chart(chart, use_container_width=True)
-
-    # ---------------------------
-    # Pie chart of skill distribution
-    # ---------------------------
-    st.subheader("Skill Distribution (Pie Chart)")
-    fig, ax = plt.subplots()
-    ax.pie(
-        skill_df["Count"],
-        labels=skill_df["Skill"],
-        autopct='%1.1f%%',
-        startangle=90
-    )
-    ax.axis("equal")  # Equal aspect ratio → perfect circle
-    st.pyplot(fig)
+    # Job counts by stack
+    st.subheader("🛠️ Job Distribution by Tech Stack")
+    st.bar_chart(filtered_df["stack"].value_counts())
 else:
-    st.info("No skills found in job titles for the current filter.")
-
-# ---------------------------
-# Show job listings
-# ---------------------------
-st.subheader("Job Listings")
-st.dataframe(filtered_df)
+    st.error("No job postings found. Please try again later.")
